@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import {
   api,
+  type AssignmentConfirmResponse,
   type AssignmentResponse,
   type BacklogItem,
   type ChatResponse,
@@ -12,6 +13,8 @@ import {
   type TaskGenerationResponse,
   type TeamMember,
   type User,
+  type WorkSnapshotResponse,
+  type WorkTrackingDashboardResponse,
   type Workspace,
 } from '../lib/api';
 
@@ -41,15 +44,22 @@ type AppState = {
   personalMessages: MessageItem[];
   generatedTasks: TaskGenerationResponse | null;
   assignments: AssignmentResponse | null;
+  confirmedAssignments: AssignmentConfirmResponse | null;
+  jiraSnapshot: WorkSnapshotResponse | null;
+  linearSnapshot: WorkSnapshotResponse | null;
+  workTrackingDashboard: WorkTrackingDashboardResponse | null;
   loading: boolean;
   error: string | null;
   bootstrap: () => Promise<void>;
-  signup: (payload: { name: string; email: string; password: string }) => Promise<void>;
-  login: (payload: { email: string; password: string }) => Promise<void>;
+  signup: (payload: { name: string; password: string }) => Promise<void>;
+  login: (payload: { name: string; password: string }) => Promise<void>;
   logout: () => void;
   loadWorkspaces: () => Promise<void>;
   createWorkspace: (payload: { name: string; description: string; team_type: string }) => Promise<Workspace>;
   setCurrentWorkspace: (workspaceId: number) => Promise<void>;
+  loadCurrentInvite: () => Promise<void>;
+  regenerateInvite: () => Promise<void>;
+  deactivateInvite: () => Promise<void>;
   validateInvite: (inviteCode: string) => Promise<void>;
   joinInvite: (inviteCode: string) => Promise<void>;
   loadProjects: (workspaceId?: number) => Promise<void>;
@@ -73,8 +83,56 @@ type AppState = {
   }) => Promise<ProjectProfile>;
   generateTasks: () => Promise<void>;
   recommendAssignments: (backlogItemIds: number[]) => Promise<void>;
+  confirmAssignments: () => Promise<void>;
   sendTeamMessage: (content: string) => Promise<void>;
   sendPersonalMessage: (content: string) => Promise<void>;
+  fetchJiraSnapshot: (payload: {
+    boards: Array<{
+      board_id: number;
+      sprint_state?: 'active' | 'future' | 'closed';
+      sprint_limit?: number;
+      sprint_issue_limit?: number;
+      backlog_limit?: number;
+      include_sprints?: boolean;
+      include_backlog?: boolean;
+    }>;
+  }) => Promise<void>;
+  fetchLinearSnapshot: (payload: {
+    teams: Array<{
+      team_id?: string;
+      team_key?: string;
+      issue_limit?: number;
+      cycle_limit?: number;
+      include_current_cycle?: boolean;
+      include_backlog?: boolean;
+    }>;
+  }) => Promise<void>;
+  fetchWorkTrackingDashboard: (payload: {
+    jira?: {
+      boards: Array<{
+        board_id: number;
+        sprint_state?: 'active' | 'future' | 'closed';
+        sprint_limit?: number;
+        sprint_issue_limit?: number;
+        backlog_limit?: number;
+        include_sprints?: boolean;
+        include_backlog?: boolean;
+      }>;
+    };
+    linear?: {
+      teams: Array<{
+        team_id?: string;
+        team_key?: string;
+        issue_limit?: number;
+        cycle_limit?: number;
+        include_current_cycle?: boolean;
+        include_backlog?: boolean;
+      }>;
+    };
+    group_by?: 'source' | 'scope' | 'project' | 'team' | 'assignee' | 'label' | 'status_category';
+    include_items?: boolean;
+    exclude_canceled_from_progress?: boolean;
+  }) => Promise<void>;
   clearError: () => void;
 };
 
@@ -111,6 +169,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   personalMessages: [],
   generatedTasks: null,
   assignments: null,
+  confirmedAssignments: null,
+  jiraSnapshot: null,
+  linearSnapshot: null,
+  workTrackingDashboard: null,
   loading: false,
   error: null,
 
@@ -133,6 +195,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         projects: [],
         currentWorkspaceId: null,
         currentProjectId: null,
+        inviteInfo: null,
         loading: false,
         error: error instanceof Error ? error.message : 'Failed to restore session',
       });
@@ -210,9 +273,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ workspaces, currentWorkspaceId });
 
     if (currentWorkspaceId) {
+      await get().loadCurrentInvite();
       await get().loadProjects(currentWorkspaceId);
     } else {
-      set({ projects: [], currentProjectId: null });
+      set({ inviteInfo: null, projects: [], currentProjectId: null });
     }
   },
 
@@ -227,6 +291,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({
         workspaces,
         currentWorkspaceId: workspace.id,
+        inviteInfo: null,
         projects: [],
         currentProjectId: null,
       });
@@ -241,8 +306,69 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setCurrentWorkspace: async (workspaceId) => {
     localStorage.setItem(WORKSPACE_KEY, String(workspaceId));
-    set({ currentWorkspaceId: workspaceId, currentProjectId: null, members: [], backlog: [], dashboard: null });
+    set({
+      currentWorkspaceId: workspaceId,
+      currentProjectId: null,
+      inviteInfo: null,
+      members: [],
+      backlog: [],
+      dashboard: null,
+      generatedTasks: null,
+      assignments: null,
+      confirmedAssignments: null,
+    });
+    await get().loadCurrentInvite();
     await get().loadProjects(workspaceId);
+  },
+
+  loadCurrentInvite: async () => {
+    const token = get().token;
+    const workspaceId = get().currentWorkspaceId;
+    if (!token || !workspaceId) return;
+
+    try {
+      const inviteInfo = await api.getInvite(token, workspaceId);
+      set({ inviteInfo });
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to load invite link' });
+      throw error;
+    }
+  },
+
+  regenerateInvite: async () => {
+    const token = get().token;
+    const workspaceId = get().currentWorkspaceId;
+    if (!token || !workspaceId) throw new Error('Workspace is required');
+
+    set({ loading: true, error: null });
+    try {
+      const inviteInfo = await api.regenerateInvite(token, workspaceId);
+      set({ inviteInfo });
+      await get().loadWorkspaces();
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to regenerate invite' });
+      throw error;
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  deactivateInvite: async () => {
+    const token = get().token;
+    const workspaceId = get().currentWorkspaceId;
+    if (!token || !workspaceId) throw new Error('Workspace is required');
+
+    set({ loading: true, error: null });
+    try {
+      const inviteInfo = await api.deactivateInvite(token, workspaceId);
+      set({ inviteInfo });
+      await get().loadWorkspaces();
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to deactivate invite' });
+      throw error;
+    } finally {
+      set({ loading: false });
+    }
   },
 
   validateInvite: async (inviteCode) => {
@@ -300,7 +426,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (currentProjectId) {
       await get().loadProjectBundle(currentProjectId);
     } else {
-      set({ members: [], backlog: [], dashboard: null, generatedTasks: null, assignments: null });
+      set({
+        members: [],
+        backlog: [],
+        dashboard: null,
+        generatedTasks: null,
+        assignments: null,
+        confirmedAssignments: null,
+      });
     }
   },
 
@@ -389,9 +522,40 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const assignments = await api.recommendAssignments(token, projectId, backlogItemIds);
-      set({ assignments });
+      set({ assignments, confirmedAssignments: null });
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Failed to recommend assignments' });
+      throw error;
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  confirmAssignments: async () => {
+    const token = get().token;
+    const projectId = get().currentProjectId;
+    const assignmentState = get().assignments;
+    if (!token || !projectId || !assignmentState) throw new Error('Assignments are required');
+
+    const payload = assignmentState.assignments
+      .filter((assignment) => assignment.recommended_assignee_id !== null)
+      .map((assignment) => ({
+        backlog_item_id: assignment.backlog_item_id,
+        assignee_id: assignment.recommended_assignee_id as number,
+        assignment_reason: assignment.recommendation_reason,
+      }));
+
+    if (payload.length === 0) {
+      throw new Error('No valid assignment recommendations to confirm');
+    }
+
+    set({ loading: true, error: null });
+    try {
+      const confirmedAssignments = await api.confirmAssignments(token, projectId, payload);
+      set({ confirmedAssignments });
+      await get().loadProjectBundle(projectId);
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to confirm assignments' });
       throw error;
     } finally {
       set({ loading: false });
@@ -431,6 +595,45 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Failed to send personal message' });
       throw error;
+    }
+  },
+
+  fetchJiraSnapshot: async (payload) => {
+    set({ loading: true, error: null });
+    try {
+      const jiraSnapshot = await api.getJiraSnapshot(payload);
+      set({ jiraSnapshot });
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to load Jira snapshot' });
+      throw error;
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  fetchLinearSnapshot: async (payload) => {
+    set({ loading: true, error: null });
+    try {
+      const linearSnapshot = await api.getLinearSnapshot(payload);
+      set({ linearSnapshot });
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to load Linear snapshot' });
+      throw error;
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  fetchWorkTrackingDashboard: async (payload) => {
+    set({ loading: true, error: null });
+    try {
+      const workTrackingDashboard = await api.getWorkTrackingDashboard(payload);
+      set({ workTrackingDashboard });
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to load work tracking dashboard' });
+      throw error;
+    } finally {
+      set({ loading: false });
     }
   },
 

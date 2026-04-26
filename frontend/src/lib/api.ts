@@ -4,7 +4,7 @@ export const API_BASE_URL =
 export type User = {
   id: number;
   name: string;
-  email: string;
+  email?: string | null;
 };
 
 export type AuthResponse = {
@@ -43,6 +43,84 @@ export type InviteInfo = {
   message?: string;
 };
 
+export type ProgressSummary = {
+  total_items: number;
+  effective_items: number;
+  backlog_items: number;
+  in_progress_items: number;
+  done_items: number;
+  canceled_items: number;
+  total_estimate?: number | null;
+  completed_estimate?: number | null;
+  completion_rate: number;
+  weighted_completion_rate?: number | null;
+};
+
+export type WorkIteration = {
+  source: 'jira' | 'linear';
+  external_id: string;
+  name: string;
+  state?: string | null;
+  scope_id: string;
+  scope_name: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  goal?: string | null;
+  progress?: number | null;
+};
+
+export type WorkItem = {
+  source: 'jira' | 'linear';
+  scope_id: string;
+  scope_name: string;
+  external_id: string;
+  title: string;
+  url?: string | null;
+  project_name?: string | null;
+  team_name?: string | null;
+  assignee_name?: string | null;
+  status_name: string;
+  status_category: 'backlog' | 'in_progress' | 'done' | 'canceled';
+  labels: string[];
+  estimate?: number | null;
+  priority?: string | null;
+  is_backlog: boolean;
+  is_current_iteration: boolean;
+  iteration_id?: string | null;
+  iteration_name?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  completed_at?: string | null;
+};
+
+export type WorkScopeSnapshot = {
+  source: 'jira' | 'linear';
+  scope_id: string;
+  scope_name: string;
+  iterations: WorkIteration[];
+  summary: ProgressSummary;
+  items: WorkItem[];
+};
+
+export type WorkSnapshotResponse = {
+  scopes: WorkScopeSnapshot[];
+  summary: ProgressSummary;
+};
+
+export type WorkTrackingArea = {
+  key: string;
+  label: string;
+  summary: ProgressSummary;
+};
+
+export type WorkTrackingDashboardResponse = {
+  summary: ProgressSummary;
+  areas: WorkTrackingArea[];
+  sources: WorkTrackingArea[];
+  scopes: WorkScopeSnapshot[];
+  items: WorkItem[];
+};
+
 export type Project = {
   id: number;
   workspace_id: number;
@@ -63,7 +141,7 @@ export type ProjectProfile = {
   project_id: number;
   user_id: number;
   user_name: string;
-  user_email: string;
+  user_email?: string | null;
   project_role: string;
   tech_stack: string[];
   strong_tasks: string[];
@@ -76,7 +154,7 @@ export type ProjectProfile = {
 export type TeamMember = {
   user_id: number;
   user_name: string;
-  user_email: string;
+  user_email?: string | null;
   workspace_role: string;
   joined_at: string;
   project_profile: ProjectProfile | null;
@@ -147,6 +225,10 @@ export type AssignmentResponse = {
   }>;
 };
 
+export type AssignmentConfirmResponse = {
+  created_issue_ids: number[];
+};
+
 type RequestOptions = RequestInit & {
   token?: string | null;
 };
@@ -184,12 +266,12 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 }
 
 export const api = {
-  signup: (payload: { name: string; email: string; password: string }) =>
+  signup: (payload: { name: string; password: string }) =>
     request<AuthResponse>('/auth/signup', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
-  login: (payload: { email: string; password: string }) =>
+  login: (payload: { name: string; password: string }) =>
     request<AuthResponse>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -207,6 +289,21 @@ export const api = {
     }),
   getInvite: (token: string, workspaceId: number) =>
     request<InviteInfo>(`/workspaces/${workspaceId}/invite`, { token }),
+  regenerateInvite: (
+    token: string,
+    workspaceId: number,
+    payload: { expires_at?: string | null; max_uses?: number | null } = {}
+  ) =>
+    request<InviteInfo>(`/workspaces/${workspaceId}/invite/regenerate`, {
+      method: 'PATCH',
+      token,
+      body: JSON.stringify(payload),
+    }),
+  deactivateInvite: (token: string, workspaceId: number) =>
+    request<InviteInfo>(`/workspaces/${workspaceId}/invite/deactivate`, {
+      method: 'PATCH',
+      token,
+    }),
   validateInvite: (inviteCode: string) => request<InviteInfo>(`/invites/${inviteCode}`),
   joinInvite: (token: string, inviteCode: string) =>
     request<{ workspace_id: number; workspace_name: string; joined: boolean; workspace_role: string }>(
@@ -267,6 +364,21 @@ export const api = {
       token,
       body: JSON.stringify({ backlog_item_ids: backlogItemIds }),
     }),
+  confirmAssignments: (
+    token: string,
+    projectId: number,
+    assignments: Array<{
+      backlog_item_id: number;
+      assignee_id: number;
+      assignment_reason: string;
+      sprint_id?: number | null;
+    }>
+  ) =>
+    request<AssignmentConfirmResponse>(`/projects/${projectId}/ai/assignments/confirm`, {
+      method: 'POST',
+      token,
+      body: JSON.stringify({ assignments }),
+    }),
   sendTeamMessage: (token: string, projectId: number, content: string) =>
     request<ChatResponse>(`/projects/${projectId}/chat/team/messages`, {
       method: 'POST',
@@ -278,5 +390,68 @@ export const api = {
       method: 'POST',
       token,
       body: JSON.stringify({ content }),
+    }),
+  getJiraSnapshot: (
+    payload: {
+      boards: Array<{
+        board_id: number;
+        sprint_state?: 'active' | 'future' | 'closed';
+        sprint_limit?: number;
+        sprint_issue_limit?: number;
+        backlog_limit?: number;
+        include_sprints?: boolean;
+        include_backlog?: boolean;
+      }>;
+    }
+  ) =>
+    request<WorkSnapshotResponse>('/work-tracking/jira/snapshot', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  getLinearSnapshot: (
+    payload: {
+      teams: Array<{
+        team_id?: string;
+        team_key?: string;
+        issue_limit?: number;
+        cycle_limit?: number;
+        include_current_cycle?: boolean;
+        include_backlog?: boolean;
+      }>;
+    }
+  ) =>
+    request<WorkSnapshotResponse>('/work-tracking/linear/snapshot', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  getWorkTrackingDashboard: (payload: {
+    jira?: {
+      boards: Array<{
+        board_id: number;
+        sprint_state?: 'active' | 'future' | 'closed';
+        sprint_limit?: number;
+        sprint_issue_limit?: number;
+        backlog_limit?: number;
+        include_sprints?: boolean;
+        include_backlog?: boolean;
+      }>;
+    };
+    linear?: {
+      teams: Array<{
+        team_id?: string;
+        team_key?: string;
+        issue_limit?: number;
+        cycle_limit?: number;
+        include_current_cycle?: boolean;
+        include_backlog?: boolean;
+      }>;
+    };
+    group_by?: 'source' | 'scope' | 'project' | 'team' | 'assignee' | 'label' | 'status_category';
+    include_items?: boolean;
+    exclude_canceled_from_progress?: boolean;
+  }) =>
+    request<WorkTrackingDashboardResponse>('/work-tracking/dashboard', {
+      method: 'POST',
+      body: JSON.stringify(payload),
     }),
 };

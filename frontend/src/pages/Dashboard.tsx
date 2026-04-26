@@ -1,12 +1,18 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { motion } from 'framer-motion';
 import {
+  Ban,
   ChevronDown,
   ChevronRight,
+  Copy,
+  ExternalLink,
   FolderKanban,
   LayoutDashboard,
+  Link2,
   MessageSquare,
   Plus,
+  PlugZap,
+  RefreshCcw,
   Send,
   Settings,
   Star,
@@ -17,7 +23,15 @@ import { useNavigate } from 'react-router-dom';
 
 import { useAppStore } from '../store/appStore';
 
-type TabKey = 'stats' | 'projects' | 'members' | 'backlog' | 'aiShared' | 'aiPrivate';
+type TabKey =
+  | 'workspace'
+  | 'stats'
+  | 'projects'
+  | 'members'
+  | 'backlog'
+  | 'external'
+  | 'aiShared'
+  | 'aiPrivate';
 
 const SidebarItem = ({
   active,
@@ -79,6 +93,7 @@ const Dashboard = () => {
     workspaces,
     currentWorkspaceId,
     setCurrentWorkspace,
+    inviteInfo,
     projects,
     currentProjectId,
     setCurrentProject,
@@ -89,17 +104,29 @@ const Dashboard = () => {
     personalMessages,
     generatedTasks,
     assignments,
+    confirmedAssignments,
+    jiraSnapshot,
+    linearSnapshot,
+    workTrackingDashboard,
     loadWorkspaces,
+    loadCurrentInvite,
+    regenerateInvite,
+    deactivateInvite,
     createProject,
     saveProfile,
     generateTasks,
     recommendAssignments,
+    confirmAssignments,
     sendTeamMessage,
     sendPersonalMessage,
+    fetchJiraSnapshot,
+    fetchLinearSnapshot,
+    fetchWorkTrackingDashboard,
     logout,
   } = useAppStore();
-  const [activeTab, setActiveTab] = useState<TabKey>('stats');
+  const [activeTab, setActiveTab] = useState<TabKey>('workspace');
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const [copiedInvite, setCopiedInvite] = useState(false);
   const [projectForm, setProjectForm] = useState({
     name: '',
     description: '',
@@ -118,12 +145,27 @@ const Dashboard = () => {
   });
   const [teamPrompt, setTeamPrompt] = useState('');
   const [personalPrompt, setPersonalPrompt] = useState('');
+  const [trackingForm, setTrackingForm] = useState({
+    jira_board_ids: '',
+    linear_team_ids: '',
+    sprint_state: 'active' as 'active' | 'future' | 'closed',
+    group_by: 'project' as 'source' | 'scope' | 'project' | 'team' | 'assignee' | 'label' | 'status_category',
+    include_items: true,
+    include_backlog: true,
+    include_current_cycle: true,
+  });
 
   useEffect(() => {
     if (workspaces.length === 0) {
       void loadWorkspaces();
     }
   }, [loadWorkspaces, workspaces.length]);
+
+  useEffect(() => {
+    if (currentWorkspaceId && !inviteInfo) {
+      void loadCurrentInvite();
+    }
+  }, [currentWorkspaceId, inviteInfo, loadCurrentInvite]);
 
   const currentWorkspace = useMemo(
     () => workspaces.find((workspace) => workspace.id === currentWorkspaceId) ?? null,
@@ -134,13 +176,15 @@ const Dashboard = () => {
     [currentProjectId, projects]
   );
   const myProjectProfile = useMemo(
-    () =>
-      members.find((member) => member.user_id === user?.id)?.project_profile ?? null,
+    () => members.find((member) => member.user_id === user?.id)?.project_profile ?? null,
     [members, user?.id]
   );
 
   const handleCreateProject = async () => {
     clearError();
+    if (!currentWorkspaceId) {
+      return;
+    }
     const createdProject = await createProject({
       ...projectForm,
       tech_stack: splitCsv(projectForm.tech_stack),
@@ -178,6 +222,49 @@ const Dashboard = () => {
         await recommendAssignments(targetIds);
       }
     }
+  };
+
+  const handleCopyInvite = async () => {
+    if (!inviteInfo?.invite_url) return;
+    await navigator.clipboard.writeText(inviteInfo.invite_url);
+    setCopiedInvite(true);
+    window.setTimeout(() => setCopiedInvite(false), 2000);
+  };
+
+  const handleLoadWorkTracking = async () => {
+    clearError();
+    const jiraBoards = splitCsv(trackingForm.jira_board_ids)
+      .map((value) => Number(value))
+      .filter((value) => Number.isFinite(value) && value > 0)
+      .map((board_id) => ({
+        board_id,
+        sprint_state: trackingForm.sprint_state,
+        include_backlog: trackingForm.include_backlog,
+        include_sprints: true,
+      }));
+    const linearTeams = splitCsv(trackingForm.linear_team_ids).map((value) => ({
+      team_id: value,
+      include_current_cycle: trackingForm.include_current_cycle,
+      include_backlog: trackingForm.include_backlog,
+    }));
+
+    if (jiraBoards.length === 0 && linearTeams.length === 0) {
+      throw new Error('Jira board ID 또는 Linear team ID를 하나 이상 입력해야 합니다.');
+    }
+
+    if (jiraBoards.length > 0) {
+      await fetchJiraSnapshot({ boards: jiraBoards });
+    }
+    if (linearTeams.length > 0) {
+      await fetchLinearSnapshot({ teams: linearTeams });
+    }
+    await fetchWorkTrackingDashboard({
+      jira: jiraBoards.length > 0 ? { boards: jiraBoards } : undefined,
+      linear: linearTeams.length > 0 ? { teams: linearTeams } : undefined,
+      group_by: trackingForm.group_by,
+      include_items: trackingForm.include_items,
+      exclude_canceled_from_progress: true,
+    });
   };
 
   return (
@@ -297,10 +384,12 @@ const Dashboard = () => {
               WORKSPACE
             </span>
           </div>
+          <SidebarItem active={activeTab === 'workspace'} icon={Link2} label="초대 / 설정" onClick={() => setActiveTab('workspace')} />
           <SidebarItem active={activeTab === 'stats'} icon={LayoutDashboard} label="대시보드" onClick={() => setActiveTab('stats')} />
           <SidebarItem active={activeTab === 'projects'} icon={FolderKanban} label="프로젝트" onClick={() => setActiveTab('projects')} />
           <SidebarItem active={activeTab === 'members'} icon={Users} label="팀원 프로필" onClick={() => setActiveTab('members')} />
           <SidebarItem active={activeTab === 'backlog'} icon={Star} label="백로그 / 배정" onClick={() => setActiveTab('backlog')} />
+          <SidebarItem active={activeTab === 'external'} icon={PlugZap} label="Jira / Linear" onClick={() => setActiveTab('external')} />
           <SidebarItem active={activeTab === 'aiShared'} icon={MessageSquare} label="AI PM 공유 채팅" onClick={() => setActiveTab('aiShared')} />
           <SidebarItem active={activeTab === 'aiPrivate'} icon={User} label="개인 AI 채팅" onClick={() => setActiveTab('aiPrivate')} />
         </nav>
@@ -329,7 +418,7 @@ const Dashboard = () => {
             <span className="body-medium">{currentProject?.name ?? '프로젝트 선택'}</span>
           </div>
           <div className="body-text" style={{ color: 'var(--warm-gray-500)', fontSize: '14px' }}>
-            {user?.name} · {user?.email}
+            {user?.name}
           </div>
         </header>
 
@@ -347,6 +436,85 @@ const Dashboard = () => {
             >
               {error}
             </div>
+          )}
+
+          {activeTab === 'workspace' && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ display: 'grid', gap: '24px' }}>
+              <div>
+                <h2 className="section-heading" style={{ fontSize: '32px', marginBottom: '10px' }}>
+                  워크스페이스 초대 관리
+                </h2>
+                <p className="body-text" style={{ color: 'var(--warm-gray-500)' }}>
+                  현재 워크스페이스의 초대 링크를 복사하고, 재발급하거나 비활성화할 수 있습니다.
+                </p>
+              </div>
+
+              <div style={panelStyle}>
+                {!currentWorkspace ? (
+                  <div className="body-text" style={{ color: 'var(--warm-gray-500)' }}>
+                    먼저 워크스페이스를 선택하세요.
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gap: '16px' }}>
+                    <div>
+                      <div className="body-semibold" style={{ marginBottom: '6px' }}>
+                        {currentWorkspace.name}
+                      </div>
+                      <div className="body-text" style={{ color: 'var(--warm-gray-500)' }}>
+                        {currentWorkspace.description}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        padding: '16px',
+                        borderRadius: '10px',
+                        border: 'var(--whisper-border)',
+                        backgroundColor: 'var(--warm-white)',
+                      }}
+                    >
+                      <div className="body-text" style={{ color: 'var(--warm-gray-500)', marginBottom: '6px' }}>
+                        초대 링크
+                      </div>
+                      <div className="body-semibold" style={{ wordBreak: 'break-all' }}>
+                        {inviteInfo?.invite_url ?? '초대 링크를 불러오는 중입니다.'}
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+                      {[
+                        ['초대 코드', inviteInfo?.invite_code ?? '-'],
+                        ['활성 상태', inviteInfo?.invite_code_active ? '활성' : '비활성'],
+                        ['팀원 수', `${inviteInfo?.member_count ?? currentWorkspace.member_count}명`],
+                        ['사용 수', `${inviteInfo?.invite_code_used_count ?? 0}`],
+                      ].map(([label, value]) => (
+                        <div key={label} style={panelStyle}>
+                          <div className="body-text" style={{ color: 'var(--warm-gray-500)', marginBottom: '8px' }}>
+                            {label}
+                          </div>
+                          <div className="body-semibold">{value}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                      <button className="btn-primary" onClick={() => void handleCopyInvite()} disabled={!inviteInfo?.invite_url}>
+                        <Copy size={16} style={{ marginRight: '8px', verticalAlign: 'middle' }} />
+                        {copiedInvite ? '복사됨' : '초대 링크 복사'}
+                      </button>
+                      <button className="btn-secondary" onClick={() => void regenerateInvite()}>
+                        <RefreshCcw size={16} style={{ marginRight: '8px', verticalAlign: 'middle' }} />
+                        링크 재발급
+                      </button>
+                      <button className="btn-secondary" onClick={() => void deactivateInvite()}>
+                        <Ban size={16} style={{ marginRight: '8px', verticalAlign: 'middle' }} />
+                        링크 비활성화
+                      </button>
+                      <button className="btn-secondary" onClick={() => void loadCurrentInvite()}>
+                        새로고침
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
           )}
 
           {activeTab === 'stats' && (
@@ -451,12 +619,28 @@ const Dashboard = () => {
                 <h3 className="card-title" style={{ marginBottom: '12px' }}>
                   새 프로젝트 만들기
                 </h3>
-                <div style={{ display: 'grid', gap: '12px' }}>
+                {!currentWorkspaceId && (
+                  <div
+                    style={{
+                      marginBottom: '12px',
+                      padding: '12px 14px',
+                      borderRadius: '8px',
+                      backgroundColor: 'var(--warm-white)',
+                      border: 'var(--whisper-border)',
+                      color: 'var(--warm-gray-500)',
+                      fontSize: '14px',
+                    }}
+                  >
+                    프로젝트를 만들려면 먼저 워크스페이스를 생성하거나 선택해야 합니다.
+                  </div>
+                )}
+                <div style={{ display: 'grid', gap: '12px', opacity: currentWorkspaceId ? 1 : 0.6 }}>
                   <input
                     value={projectForm.name}
                     onChange={(event) => setProjectForm((prev) => ({ ...prev, name: event.target.value }))}
                     placeholder="프로젝트 이름"
                     style={inputStyle}
+                    disabled={!currentWorkspaceId}
                   />
                   <textarea
                     value={projectForm.description}
@@ -465,12 +649,14 @@ const Dashboard = () => {
                     }
                     placeholder="프로젝트 설명"
                     style={{ ...inputStyle, minHeight: '88px', resize: 'vertical' }}
+                    disabled={!currentWorkspaceId}
                   />
                   <input
                     value={projectForm.goal}
                     onChange={(event) => setProjectForm((prev) => ({ ...prev, goal: event.target.value }))}
                     placeholder="프로젝트 목표"
                     style={inputStyle}
+                    disabled={!currentWorkspaceId}
                   />
                   <input
                     value={projectForm.tech_stack}
@@ -479,6 +665,7 @@ const Dashboard = () => {
                     }
                     placeholder="기술 스택 (쉼표 구분)"
                     style={inputStyle}
+                    disabled={!currentWorkspaceId}
                   />
                   <input
                     value={projectForm.mvp_scope}
@@ -487,8 +674,13 @@ const Dashboard = () => {
                     }
                     placeholder="MVP 범위"
                     style={inputStyle}
+                    disabled={!currentWorkspaceId}
                   />
-                  <button className="btn-primary" onClick={() => void handleCreateProject()}>
+                  <button
+                    className="btn-primary"
+                    onClick={() => void handleCreateProject()}
+                    disabled={!currentWorkspaceId}
+                  >
                     프로젝트 생성
                   </button>
                 </div>
@@ -612,6 +804,30 @@ const Dashboard = () => {
                     AI로 태스크 생성
                   </button>
                 </div>
+                {assignments && assignments.assignments.length > 0 && (
+                  <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center' }}>
+                    <p className="body-text" style={{ color: 'var(--warm-gray-500)' }}>
+                      추천 담당자를 실제 이슈로 확정할 수 있습니다.
+                    </p>
+                    <button className="btn-secondary" onClick={() => void confirmAssignments()}>
+                      추천 배정 확정
+                    </button>
+                  </div>
+                )}
+                {confirmedAssignments && (
+                  <div
+                    style={{
+                      marginBottom: '12px',
+                      padding: '12px 14px',
+                      borderRadius: '8px',
+                      backgroundColor: '#eef9f1',
+                      color: '#067647',
+                      fontSize: '14px',
+                    }}
+                  >
+                    이슈 {confirmedAssignments.created_issue_ids.length}개가 생성되었습니다.
+                  </div>
+                )}
                 <div style={{ display: 'grid', gap: '12px' }}>
                   {backlog.map((item) => (
                     <div
@@ -678,6 +894,218 @@ const Dashboard = () => {
                     ))}
                   </div>
                 </div>
+              )}
+            </motion.div>
+          )}
+
+          {activeTab === 'external' && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ display: 'grid', gap: '24px' }}>
+              <div>
+                <h2 className="section-heading" style={{ fontSize: '32px', marginBottom: '10px' }}>
+                  Jira / Linear 연동
+                </h2>
+                <p className="body-text" style={{ color: 'var(--warm-gray-500)' }}>
+                  보드 ID와 팀 ID를 입력하면 외부 이슈를 스냅샷으로 가져오고 통합 진행률을 볼 수 있습니다.
+                </p>
+              </div>
+
+              <div style={panelStyle}>
+                <div style={{ display: 'grid', gap: '12px' }}>
+                  <input
+                    value={trackingForm.jira_board_ids}
+                    onChange={(event) => setTrackingForm((prev) => ({ ...prev, jira_board_ids: event.target.value }))}
+                    placeholder="Jira board IDs (예: 12, 18)"
+                    style={inputStyle}
+                  />
+                  <input
+                    value={trackingForm.linear_team_ids}
+                    onChange={(event) => setTrackingForm((prev) => ({ ...prev, linear_team_ids: event.target.value }))}
+                    placeholder="Linear team IDs (예: abc123, def456)"
+                    style={inputStyle}
+                  />
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px' }}>
+                    <select
+                      value={trackingForm.sprint_state}
+                      onChange={(event) =>
+                        setTrackingForm((prev) => ({
+                          ...prev,
+                          sprint_state: event.target.value as 'active' | 'future' | 'closed',
+                        }))
+                      }
+                      style={inputStyle}
+                    >
+                      <option value="active">Jira Active Sprint</option>
+                      <option value="future">Jira Future Sprint</option>
+                      <option value="closed">Jira Closed Sprint</option>
+                    </select>
+                    <select
+                      value={trackingForm.group_by}
+                      onChange={(event) =>
+                        setTrackingForm((prev) => ({
+                          ...prev,
+                          group_by: event.target.value as 'source' | 'scope' | 'project' | 'team' | 'assignee' | 'label' | 'status_category',
+                        }))
+                      }
+                      style={inputStyle}
+                    >
+                      <option value="project">프로젝트별</option>
+                      <option value="team">팀별</option>
+                      <option value="assignee">담당자별</option>
+                      <option value="label">라벨별</option>
+                      <option value="source">소스별</option>
+                      <option value="scope">스코프별</option>
+                      <option value="status_category">상태별</option>
+                    </select>
+                  </div>
+                  <div style={{ display: 'flex', gap: '18px', flexWrap: 'wrap' }}>
+                    <label className="body-text">
+                      <input
+                        type="checkbox"
+                        checked={trackingForm.include_backlog}
+                        onChange={(event) => setTrackingForm((prev) => ({ ...prev, include_backlog: event.target.checked }))}
+                        style={{ marginRight: '8px' }}
+                      />
+                      백로그 포함
+                    </label>
+                    <label className="body-text">
+                      <input
+                        type="checkbox"
+                        checked={trackingForm.include_current_cycle}
+                        onChange={(event) => setTrackingForm((prev) => ({ ...prev, include_current_cycle: event.target.checked }))}
+                        style={{ marginRight: '8px' }}
+                      />
+                      Linear 현재 사이클 포함
+                    </label>
+                    <label className="body-text">
+                      <input
+                        type="checkbox"
+                        checked={trackingForm.include_items}
+                        onChange={(event) => setTrackingForm((prev) => ({ ...prev, include_items: event.target.checked }))}
+                        style={{ marginRight: '8px' }}
+                      />
+                      상세 아이템 표시
+                    </label>
+                  </div>
+                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    <button className="btn-primary" onClick={() => void handleLoadWorkTracking()}>
+                      통합 대시보드 불러오기
+                    </button>
+                    {jiraSnapshot?.scopes[0]?.items[0]?.url && (
+                      <a
+                        href={jiraSnapshot.scopes[0].items[0].url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn-secondary"
+                        style={{ textDecoration: 'none' }}
+                      >
+                        <ExternalLink size={16} style={{ marginRight: '8px', verticalAlign: 'middle' }} />
+                        Jira 이슈 열기
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {workTrackingDashboard && (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '16px' }}>
+                    {[
+                      ['전체 업무', workTrackingDashboard.summary.total_items],
+                      ['진행 중', workTrackingDashboard.summary.in_progress_items],
+                      ['완료', workTrackingDashboard.summary.done_items],
+                      ['완료율', `${Math.round(workTrackingDashboard.summary.completion_rate * 100)}%`],
+                    ].map(([label, value]) => (
+                      <div key={label} style={panelStyle}>
+                        <div className="body-text" style={{ color: 'var(--warm-gray-500)', marginBottom: '8px' }}>
+                          {label}
+                        </div>
+                        <div className="section-heading" style={{ fontSize: '28px' }}>
+                          {value}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={panelStyle}>
+                    <h3 className="card-title" style={{ marginBottom: '12px' }}>
+                      그룹별 현황
+                    </h3>
+                    <div style={{ display: 'grid', gap: '12px' }}>
+                      {workTrackingDashboard.areas.map((area) => (
+                        <div key={area.key} style={{ padding: '14px', borderRadius: '10px', border: 'var(--whisper-border)' }}>
+                          <div className="body-semibold">{area.label}</div>
+                          <div className="body-text" style={{ color: 'var(--warm-gray-500)', marginTop: '6px' }}>
+                            전체 {area.summary.total_items} · 진행 {area.summary.in_progress_items} · 완료 {area.summary.done_items}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={panelStyle}>
+                    <h3 className="card-title" style={{ marginBottom: '12px' }}>
+                      스코프 스냅샷
+                    </h3>
+                    <div style={{ display: 'grid', gap: '12px' }}>
+                      {workTrackingDashboard.scopes.map((scope) => (
+                        <div key={`${scope.source}-${scope.scope_id}`} style={{ padding: '14px', borderRadius: '10px', border: 'var(--whisper-border)' }}>
+                          <div className="body-semibold">
+                            {scope.scope_name} · {scope.source.toUpperCase()}
+                          </div>
+                          <div className="body-text" style={{ color: 'var(--warm-gray-500)', marginTop: '6px' }}>
+                            전체 {scope.summary.total_items} · 백로그 {scope.summary.backlog_items} · 진행 {scope.summary.in_progress_items} · 완료 {scope.summary.done_items}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {trackingForm.include_items && workTrackingDashboard.items.length > 0 && (
+                    <div style={panelStyle}>
+                      <h3 className="card-title" style={{ marginBottom: '12px' }}>
+                        외부 업무 아이템
+                      </h3>
+                      <div style={{ display: 'grid', gap: '12px' }}>
+                        {workTrackingDashboard.items.slice(0, 20).map((item) => (
+                          <div key={`${item.source}-${item.external_id}`} style={{ padding: '14px', borderRadius: '10px', border: 'var(--whisper-border)' }}>
+                            <div className="body-semibold">
+                              {item.external_id} · {item.title}
+                            </div>
+                            <div className="body-text" style={{ color: 'var(--warm-gray-500)', marginTop: '6px' }}>
+                              {item.source.toUpperCase()} · {item.status_name} · {item.assignee_name ?? 'Unassigned'} · {item.project_name ?? item.scope_name}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {(jiraSnapshot || linearSnapshot) && (
+                    <div style={panelStyle}>
+                      <h3 className="card-title" style={{ marginBottom: '12px' }}>
+                        소스별 스냅샷 요약
+                      </h3>
+                      <div style={{ display: 'grid', gap: '12px' }}>
+                        {jiraSnapshot && (
+                          <div style={{ padding: '14px', borderRadius: '10px', border: 'var(--whisper-border)' }}>
+                            <div className="body-semibold">Jira</div>
+                            <div className="body-text" style={{ color: 'var(--warm-gray-500)', marginTop: '6px' }}>
+                              스코프 {jiraSnapshot.scopes.length}개 · 이슈 {jiraSnapshot.summary.total_items}개
+                            </div>
+                          </div>
+                        )}
+                        {linearSnapshot && (
+                          <div style={{ padding: '14px', borderRadius: '10px', border: 'var(--whisper-border)' }}>
+                            <div className="body-semibold">Linear</div>
+                            <div className="body-text" style={{ color: 'var(--warm-gray-500)', marginTop: '6px' }}>
+                              스코프 {linearSnapshot.scopes.length}개 · 이슈 {linearSnapshot.summary.total_items}개
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </motion.div>
           )}

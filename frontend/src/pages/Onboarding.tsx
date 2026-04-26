@@ -31,7 +31,6 @@ const Onboarding = () => {
   const [mode, setMode] = useState<'signup' | 'login'>('signup');
   const [authForm, setAuthForm] = useState({
     name: '',
-    email: '',
     password: '',
   });
   const [workspaceForm, setWorkspaceForm] = useState({
@@ -50,7 +49,7 @@ const Onboarding = () => {
     if (mode === 'signup') {
       await signup(authForm);
     } else {
-      await login({ email: authForm.email, password: authForm.password });
+      await login(authForm);
     }
   };
 
@@ -124,15 +123,17 @@ const Onboarding = () => {
                   style={inputStyle}
                 />
               )}
-              <input
-                type="email"
-                placeholder="이메일"
-                value={authForm.email}
-                onChange={(event) =>
-                  setAuthForm((prev) => ({ ...prev, email: event.target.value }))
-                }
-                style={inputStyle}
-              />
+              {mode === 'login' && (
+                <input
+                  type="text"
+                  placeholder="이름"
+                  value={authForm.name}
+                  onChange={(event) =>
+                    setAuthForm((prev) => ({ ...prev, name: event.target.value }))
+                  }
+                  style={inputStyle}
+                />
+              )}
               <input
                 type="password"
                 placeholder="비밀번호"
@@ -241,6 +242,31 @@ const Onboarding = () => {
                 </div>
               </section>
             )}
+
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '16px 18px',
+                borderRadius: '12px',
+                border: 'var(--whisper-border)',
+                backgroundColor: 'var(--warm-white)',
+              }}
+            >
+              <div>
+                <div className="body-semibold" style={{ marginBottom: '4px' }}>
+                  워크스페이스 생성은 선택입니다
+                </div>
+                <p className="body-text" style={{ color: 'var(--warm-gray-500)', fontSize: '14px' }}>
+                  이미 초대받은 워크스페이스가 있거나 나중에 만들 예정이면 바로 대시보드로 이동할 수 있습니다.
+                </p>
+              </div>
+              <button className="btn-secondary" onClick={() => navigate('/dashboard')}>
+                지금은 건너뛰기
+              </button>
+            </div>
 
             <section>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>

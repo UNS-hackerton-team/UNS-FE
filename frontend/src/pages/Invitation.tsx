@@ -32,7 +32,6 @@ const Invitation = () => {
   const [mode, setMode] = useState<'signup' | 'login'>('login');
   const [form, setForm] = useState({
     name: '',
-    email: '',
     password: '',
   });
 
@@ -47,7 +46,7 @@ const Invitation = () => {
     if (mode === 'signup') {
       await signup(form);
     } else {
-      await login({ email: form.email, password: form.password });
+      await login(form);
     }
   };
 
@@ -170,15 +169,17 @@ const Invitation = () => {
                 style={inputStyle}
               />
             )}
-            <input
-              type="email"
-              placeholder="이메일"
-              value={form.email}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, email: event.target.value }))
-              }
-              style={inputStyle}
-            />
+            {mode === 'login' && (
+              <input
+                type="text"
+                placeholder="이름"
+                value={form.name}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, name: event.target.value }))
+                }
+                style={inputStyle}
+              />
+            )}
             <input
               type="password"
               placeholder="비밀번호"
@@ -226,7 +227,7 @@ const Invitation = () => {
                 현재 로그인
               </div>
               <div className="body-text" style={{ color: 'var(--warm-gray-500)' }}>
-                {user?.name} · {user?.email}
+                {user?.name}
               </div>
             </div>
 

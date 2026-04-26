@@ -35,6 +35,7 @@ import {
 import { useAppStore, type MessageItem } from '../store/appStore';
 
 type TabKey = 'workspace' | 'project' | 'delivery' | 'members' | 'sharedRoom' | 'privateRoom';
+const ACTIVE_PROVIDER = 'linear' as const;
 
 type CatalogState = {
   loading: boolean;
@@ -266,6 +267,14 @@ const Dashboard = () => {
     if (projectPermissions) return projectPermissions.is_pm;
     return currentProject?.pm_id === user?.id;
   }, [currentProject?.pm_id, projectPermissions, user?.id]);
+  const linearWorkspaceIntegrations = useMemo(
+    () => workspaceIntegrations.filter((item) => item.provider === ACTIVE_PROVIDER),
+    [workspaceIntegrations]
+  );
+  const linearProjectIntegrations = useMemo(
+    () => projectIntegrations.filter((item) => item.provider === ACTIVE_PROVIDER),
+    [projectIntegrations]
+  );
 
   useEffect(() => {
     if (!myProjectProfile) return;
@@ -319,14 +328,14 @@ const Dashboard = () => {
     setTimeout(() => setCopiedInvite(false), 1800);
   };
 
-  const handleConnectProvider = async (provider: 'jira' | 'linear') => {
+  const handleConnectProvider = async () => {
     clearError();
-    setConnectingProvider(provider);
+    setConnectingProvider(ACTIVE_PROVIDER);
     try {
       const redirectTo = `${window.location.origin}/dashboard`;
-      const response = await getIntegrationConnectUrl(provider, redirectTo);
+      const response = await getIntegrationConnectUrl(ACTIVE_PROVIDER, redirectTo);
       if (!response.configured || !response.authorization_url) {
-        setNotice(response.message ?? `${providerLabel(provider)} 연동이 아직 설정되지 않았습니다.`);
+        setNotice(response.message ?? `${providerLabel(ACTIVE_PROVIDER)} 연동이 아직 설정되지 않았습니다.`);
         return;
       }
       window.location.assign(response.authorization_url);
@@ -387,7 +396,7 @@ const Dashboard = () => {
     clearError();
     await attachProjectIntegration({
       workspace_integration_id: integration.id,
-      scope_type: integration.provider === 'jira' ? 'board' : 'team',
+      scope_type: 'team',
       scope_id: item.id,
       scope_name: item.name,
       settings: {
@@ -469,7 +478,7 @@ const Dashboard = () => {
             active={activeTab === 'workspace'}
             icon={Link2}
             label="워크스페이스"
-            caption="초대 링크와 Jira/Linear 연결"
+            caption="초대 링크와 Linear 연결"
             onClick={() => setActiveTab('workspace')}
           />
           <SidebarItem
@@ -645,7 +654,7 @@ const Dashboard = () => {
                 <SectionHeader
                   eyebrow="Workspace"
                   title="초대와 연동을 한 번에 관리하세요"
-                  description="워크스페이스 초대 링크를 공유하고, Jira/Linear는 버튼 한 번으로 연결합니다."
+                  description="워크스페이스 초대 링크를 공유하고, Linear는 버튼 한 번으로 연결합니다."
                 />
                 <div className="responsive-grid-2" style={{ marginTop: '24px' }}>
                   <div
@@ -712,41 +721,34 @@ const Dashboard = () => {
               <Surface>
                 <SectionHeader
                   eyebrow="Integrations"
-                  title="Jira와 Linear를 Connect 버튼으로 연결하세요"
-                  description="직접 ID를 입력하지 않고 OAuth로 먼저 연결한 뒤, 프로젝트에 필요한 보드나 팀만 선택해서 붙입니다."
+                  title="Linear를 Connect 버튼으로 연결하세요"
+                  description="직접 값을 입력하지 않고 연결한 뒤, 프로젝트에 필요한 팀만 선택해서 붙입니다."
                 />
 
                 <div className="responsive-grid-2" style={{ marginTop: '24px' }}>
-                  {(['jira', 'linear'] as const).map((provider) => {
-                    const connected = workspaceIntegrations.filter((item) => item.provider === provider);
-                    const latest = connected[0];
-                    return (
-                      <ProviderCard
-                        key={provider}
-                        provider={provider}
-                        connectedCount={connected.length}
-                        subtitle={
-                          latest
-                            ? `${latest.external_workspace_name} · 마지막 갱신 ${formatDate(latest.updated_at)}`
-                            : '아직 연결된 워크스페이스가 없습니다.'
-                        }
-                        actionLabel={latest ? '다시 연결하기' : 'Connect'}
-                        loading={connectingProvider === provider}
-                        onAction={() => void handleConnectProvider(provider)}
-                      />
-                    );
-                  })}
+                  <ProviderCard
+                    provider={ACTIVE_PROVIDER}
+                    connectedCount={linearWorkspaceIntegrations.length}
+                    subtitle={
+                      linearWorkspaceIntegrations[0]
+                        ? `${linearWorkspaceIntegrations[0].external_workspace_name} · 마지막 갱신 ${formatDate(linearWorkspaceIntegrations[0].updated_at)}`
+                        : '아직 연결된 Linear 워크스페이스가 없습니다.'
+                    }
+                    actionLabel={linearWorkspaceIntegrations[0] ? '다시 연결하기' : 'Connect'}
+                    loading={connectingProvider === ACTIVE_PROVIDER}
+                    onAction={() => void handleConnectProvider()}
+                  />
                 </div>
 
                 <div style={{ marginTop: '24px', display: 'grid', gap: '14px' }}>
-                  {workspaceIntegrations.length === 0 ? (
+                  {linearWorkspaceIntegrations.length === 0 ? (
                     <EmptyState
                       icon={PlugZap}
                       title="아직 연결된 외부 워크스페이스가 없습니다"
-                      description="위 Connect 버튼으로 Jira 또는 Linear 계정을 먼저 연결해 주세요."
+                      description="위 Connect 버튼으로 Linear 계정을 먼저 연결해 주세요."
                     />
                   ) : (
-                    workspaceIntegrations.map((integration) => (
+                    linearWorkspaceIntegrations.map((integration) => (
                       <div
                         key={integration.id}
                         style={{
@@ -1082,8 +1084,8 @@ const Dashboard = () => {
               <Surface>
                 <SectionHeader
                   eyebrow="Delivery"
-                  title="연결된 Jira/Linear 범위를 프로젝트에 붙여주세요"
-                  description="워크스페이스 연결 후 보드나 팀을 선택해서 프로젝트 범위와 연결하면, 외부 진행 현황이 자동으로 집계됩니다."
+                  title="연결된 Linear 팀을 프로젝트에 붙여주세요"
+                  description="워크스페이스 연결 후 필요한 팀을 선택해서 프로젝트 범위와 연결하면, 외부 진행 현황이 자동으로 집계됩니다."
                 />
 
                 {!currentProject ? (
@@ -1098,15 +1100,15 @@ const Dashboard = () => {
                   <div style={{ display: 'grid', gap: '20px', marginTop: '24px' }}>
                     <div style={{ display: 'grid', gap: '14px' }}>
                       <div className="body-semibold">현재 프로젝트 연결</div>
-                      {projectIntegrations.length === 0 ? (
+                      {linearProjectIntegrations.length === 0 ? (
                         <EmptyState
                           icon={Link2}
-                          title="아직 연결된 보드나 팀이 없습니다"
-                          description="아래 카탈로그에서 필요한 보드 또는 팀을 선택해 프로젝트에 연결하세요."
+                          title="아직 연결된 팀이 없습니다"
+                          description="아래 카탈로그에서 필요한 팀을 선택해 프로젝트에 연결하세요."
                         />
                       ) : (
                         <div className="responsive-grid-2">
-                          {projectIntegrations.map((integration) => (
+                          {linearProjectIntegrations.map((integration) => (
                             <div
                               key={integration.id}
                               style={{
@@ -1145,14 +1147,14 @@ const Dashboard = () => {
 
                     <div style={{ display: 'grid', gap: '14px' }}>
                       <div className="body-semibold">연결 가능한 범위</div>
-                      {workspaceIntegrations.length === 0 ? (
+                      {linearWorkspaceIntegrations.length === 0 ? (
                         <EmptyState
                           icon={PlugZap}
                           title="먼저 워크스페이스 연동이 필요합니다"
-                          description="Workspace 탭으로 이동해서 Jira 또는 Linear Connect 버튼을 눌러주세요."
+                          description="Workspace 탭으로 이동해서 Linear Connect 버튼을 눌러주세요."
                         />
                       ) : (
-                        workspaceIntegrations.map((integration) => {
+                        linearWorkspaceIntegrations.map((integration) => {
                           const catalog = catalogs[integration.id];
                           return (
                             <div
@@ -1171,11 +1173,11 @@ const Dashboard = () => {
                                     <span className="body-semibold">{integration.external_workspace_name}</span>
                                   </div>
                                   <div className="body-text" style={{ fontSize: '13px', color: 'var(--warm-gray-500)' }}>
-                                    필요한 {integration.provider === 'jira' ? '보드' : '팀'}를 불러와서 프로젝트와 연결하세요.
+                                    필요한 팀을 불러와서 프로젝트와 연결하세요.
                                   </div>
                                 </div>
                                 <button className="btn-secondary" onClick={() => void handleLoadCatalog(integration)}>
-                                  {catalog?.loading ? '불러오는 중...' : integration.provider === 'jira' ? '보드 불러오기' : '팀 불러오기'}
+                                  {catalog?.loading ? '불러오는 중...' : '팀 불러오기'}
                                 </button>
                               </div>
 
@@ -1192,7 +1194,7 @@ const Dashboard = () => {
                                     </div>
                                   )}
                                   {catalog.items.map((item) => {
-                                    const alreadyConnected = projectIntegrations.some(
+                                    const alreadyConnected = linearProjectIntegrations.some(
                                       (binding) => binding.provider === integration.provider && binding.scope_id === item.id
                                     );
                                     return (
@@ -1241,7 +1243,7 @@ const Dashboard = () => {
                 <SectionHeader
                   eyebrow="Delivery View"
                   title="프로젝트 외부 진행 상황"
-                  description="Jira/Linear에서 연결된 범위를 한 번에 집계해 현재 딜리버리 상태를 보여줍니다."
+                  description="Linear에서 연결된 범위를 한 번에 집계해 현재 딜리버리 상태를 보여줍니다."
                 />
 
                 {!deliveryDashboard ? (
@@ -1793,7 +1795,7 @@ const ProviderCard = ({
   loading,
   onAction,
 }: {
-  provider: 'jira' | 'linear';
+  provider: 'linear';
   connectedCount: number;
   subtitle: string;
   actionLabel: string;
@@ -1804,7 +1806,7 @@ const ProviderCard = ({
     style={{
       padding: '20px',
       borderRadius: '16px',
-      background: provider === 'jira' ? 'linear-gradient(180deg, #f4f9ff 0%, white 100%)' : 'linear-gradient(180deg, #f7fbf4 0%, white 100%)',
+      background: 'linear-gradient(180deg, #f7fbf4 0%, white 100%)',
       border: 'var(--whisper-border)',
     }}
   >
@@ -1842,8 +1844,8 @@ const ProviderBadge = ({ provider }: { provider: string }) => (
       gap: '8px',
       padding: '8px 12px',
       borderRadius: '999px',
-      backgroundColor: provider === 'jira' ? '#e8f1ff' : '#eef9ec',
-      color: provider === 'jira' ? '#0057d9' : '#2f6b22',
+      backgroundColor: '#eef9ec',
+      color: '#2f6b22',
     }}
     className="badge-text"
   >
@@ -2321,7 +2323,6 @@ function splitCsv(value: string): string[] {
 }
 
 function providerLabel(provider: string): string {
-  if (provider.toLowerCase() === 'jira') return 'Jira';
   if (provider.toLowerCase() === 'linear') return 'Linear';
   return provider;
 }

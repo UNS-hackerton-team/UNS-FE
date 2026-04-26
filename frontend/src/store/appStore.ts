@@ -5,17 +5,26 @@ import {
   type AssignmentConfirmResponse,
   type AssignmentResponse,
   type BacklogItem,
+  type ChatHistoryMessage,
   type ChatResponse,
   type DashboardData,
+  type IntegrationConnectUrlResponse,
   type InviteInfo,
+  type PersonalRecommendation,
   type Project,
+  type ProjectDeliveryDashboard,
+  type ProjectDomain,
+  type ProjectDomainMapping,
+  type ProjectIntegration,
+  type ProjectMemoryEntry,
+  type ProjectPermission,
   type ProjectProfile,
+  type ProjectSettings,
   type TaskGenerationResponse,
   type TeamMember,
   type User,
-  type WorkSnapshotResponse,
-  type WorkTrackingDashboardResponse,
   type Workspace,
+  type WorkspaceIntegration,
 } from '../lib/api';
 
 const TOKEN_KEY = 'uns_token';
@@ -23,10 +32,14 @@ const USER_KEY = 'uns_user';
 const WORKSPACE_KEY = 'uns_workspace_id';
 const PROJECT_KEY = 'uns_project_id';
 
-type MessageItem = {
+export type MessageItem = {
+  id?: number;
   role: 'user' | 'ai';
   content: string;
   payload?: Record<string, unknown>;
+  senderId?: number | null;
+  senderType?: string;
+  createdAt?: string;
 };
 
 type AppState = {
@@ -35,19 +48,25 @@ type AppState = {
   workspaces: Workspace[];
   currentWorkspaceId: number | null;
   inviteInfo: InviteInfo | null;
+  workspaceIntegrations: WorkspaceIntegration[];
   projects: Project[];
   currentProjectId: number | null;
+  projectSettings: ProjectSettings | null;
+  projectPermissions: ProjectPermission | null;
   members: TeamMember[];
   dashboard: DashboardData | null;
+  deliveryDashboard: ProjectDeliveryDashboard | null;
+  personalRecommendation: PersonalRecommendation | null;
+  domains: ProjectDomain[];
+  domainMappings: ProjectDomainMapping[];
+  memories: ProjectMemoryEntry[];
   backlog: BacklogItem[];
+  projectIntegrations: ProjectIntegration[];
   teamMessages: MessageItem[];
   personalMessages: MessageItem[];
   generatedTasks: TaskGenerationResponse | null;
   assignments: AssignmentResponse | null;
   confirmedAssignments: AssignmentConfirmResponse | null;
-  jiraSnapshot: WorkSnapshotResponse | null;
-  linearSnapshot: WorkSnapshotResponse | null;
-  workTrackingDashboard: WorkTrackingDashboardResponse | null;
   loading: boolean;
   error: string | null;
   bootstrap: () => Promise<void>;
@@ -62,6 +81,7 @@ type AppState = {
   deactivateInvite: () => Promise<void>;
   validateInvite: (inviteCode: string) => Promise<void>;
   joinInvite: (inviteCode: string) => Promise<void>;
+  loadWorkspaceIntegrations: (workspaceId?: number) => Promise<void>;
   loadProjects: (workspaceId?: number) => Promise<void>;
   createProject: (payload: {
     name: string;
@@ -70,6 +90,9 @@ type AppState = {
     tech_stack: string[];
     priority: string;
     mvp_scope: string;
+    start_date?: string | null;
+    end_date?: string | null;
+    ai_prompt?: string;
   }) => Promise<Project>;
   setCurrentProject: (projectId: number) => Promise<void>;
   loadProjectBundle: (projectId?: number) => Promise<void>;
@@ -81,58 +104,24 @@ type AppState = {
     available_hours_per_day: number;
     experience_level: string;
   }) => Promise<ProjectProfile>;
-  generateTasks: () => Promise<void>;
-  recommendAssignments: (backlogItemIds: number[]) => Promise<void>;
-  confirmAssignments: () => Promise<void>;
+  generateTasks: () => Promise<TaskGenerationResponse>;
+  recommendAssignments: (backlogItemIds: number[]) => Promise<AssignmentResponse>;
+  confirmAssignments: () => Promise<AssignmentConfirmResponse>;
   sendTeamMessage: (content: string) => Promise<void>;
   sendPersonalMessage: (content: string) => Promise<void>;
-  fetchJiraSnapshot: (payload: {
-    boards: Array<{
-      board_id: number;
-      sprint_state?: 'active' | 'future' | 'closed';
-      sprint_limit?: number;
-      sprint_issue_limit?: number;
-      backlog_limit?: number;
-      include_sprints?: boolean;
-      include_backlog?: boolean;
-    }>;
-  }) => Promise<void>;
-  fetchLinearSnapshot: (payload: {
-    teams: Array<{
-      team_id?: string;
-      team_key?: string;
-      issue_limit?: number;
-      cycle_limit?: number;
-      include_current_cycle?: boolean;
-      include_backlog?: boolean;
-    }>;
-  }) => Promise<void>;
-  fetchWorkTrackingDashboard: (payload: {
-    jira?: {
-      boards: Array<{
-        board_id: number;
-        sprint_state?: 'active' | 'future' | 'closed';
-        sprint_limit?: number;
-        sprint_issue_limit?: number;
-        backlog_limit?: number;
-        include_sprints?: boolean;
-        include_backlog?: boolean;
-      }>;
-    };
-    linear?: {
-      teams: Array<{
-        team_id?: string;
-        team_key?: string;
-        issue_limit?: number;
-        cycle_limit?: number;
-        include_current_cycle?: boolean;
-        include_backlog?: boolean;
-      }>;
-    };
-    group_by?: 'source' | 'scope' | 'project' | 'team' | 'assignee' | 'label' | 'status_category';
-    include_items?: boolean;
-    exclude_canceled_from_progress?: boolean;
-  }) => Promise<void>;
+  refreshPersonalRecommendation: () => Promise<void>;
+  getIntegrationConnectUrl: (
+    provider: string,
+    redirectTo?: string
+  ) => Promise<IntegrationConnectUrlResponse>;
+  attachProjectIntegration: (payload: {
+    workspace_integration_id: number;
+    scope_type: string;
+    scope_id: string;
+    scope_name: string;
+    settings?: Record<string, unknown>;
+  }) => Promise<ProjectIntegration>;
+  removeProjectIntegration: (bindingId: number) => Promise<void>;
   clearError: () => void;
 };
 
@@ -151,6 +140,81 @@ function persistAuth(token: string | null, user: User | null) {
   else localStorage.removeItem(USER_KEY);
 }
 
+function projectScopedState(): Pick<
+  AppState,
+  | 'projectSettings'
+  | 'projectPermissions'
+  | 'members'
+  | 'dashboard'
+  | 'deliveryDashboard'
+  | 'personalRecommendation'
+  | 'domains'
+  | 'domainMappings'
+  | 'memories'
+  | 'backlog'
+  | 'projectIntegrations'
+  | 'teamMessages'
+  | 'personalMessages'
+  | 'generatedTasks'
+  | 'assignments'
+  | 'confirmedAssignments'
+> {
+  return {
+    projectSettings: null,
+    projectPermissions: null,
+    members: [],
+    dashboard: null,
+    deliveryDashboard: null,
+    personalRecommendation: null,
+    domains: [],
+    domainMappings: [],
+    memories: [],
+    backlog: [],
+    projectIntegrations: [],
+    teamMessages: [],
+    personalMessages: [],
+    generatedTasks: null,
+    assignments: null,
+    confirmedAssignments: null,
+  };
+}
+
+function fullSessionState(): Pick<
+  AppState,
+  | 'workspaces'
+  | 'currentWorkspaceId'
+  | 'inviteInfo'
+  | 'workspaceIntegrations'
+  | 'projects'
+  | 'currentProjectId'
+  | 'projectSettings'
+  | 'projectPermissions'
+  | 'members'
+  | 'dashboard'
+  | 'deliveryDashboard'
+  | 'personalRecommendation'
+  | 'domains'
+  | 'domainMappings'
+  | 'memories'
+  | 'backlog'
+  | 'projectIntegrations'
+  | 'teamMessages'
+  | 'personalMessages'
+  | 'generatedTasks'
+  | 'assignments'
+  | 'confirmedAssignments'
+> {
+  return {
+    workspaces: [],
+    currentWorkspaceId: null,
+    inviteInfo: null,
+    workspaceIntegrations: [],
+    projects: [],
+    currentProjectId: null,
+    ...projectScopedState(),
+  };
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   token: localStorage.getItem(TOKEN_KEY),
   user: (() => {
@@ -160,19 +224,25 @@ export const useAppStore = create<AppState>((set, get) => ({
   workspaces: [],
   currentWorkspaceId: parseStoredNumber(WORKSPACE_KEY),
   inviteInfo: null,
+  workspaceIntegrations: [],
   projects: [],
   currentProjectId: parseStoredNumber(PROJECT_KEY),
+  projectSettings: null,
+  projectPermissions: null,
   members: [],
   dashboard: null,
+  deliveryDashboard: null,
+  personalRecommendation: null,
+  domains: [],
+  domainMappings: [],
+  memories: [],
   backlog: [],
+  projectIntegrations: [],
   teamMessages: [],
   personalMessages: [],
   generatedTasks: null,
   assignments: null,
   confirmedAssignments: null,
-  jiraSnapshot: null,
-  linearSnapshot: null,
-  workTrackingDashboard: null,
   loading: false,
   error: null,
 
@@ -188,14 +258,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       await get().loadWorkspaces();
     } catch (error) {
       persistAuth(null, null);
+      localStorage.removeItem(WORKSPACE_KEY);
+      localStorage.removeItem(PROJECT_KEY);
       set({
         token: null,
         user: null,
-        workspaces: [],
-        projects: [],
-        currentWorkspaceId: null,
-        currentProjectId: null,
-        inviteInfo: null,
+        ...fullSessionState(),
         loading: false,
         error: error instanceof Error ? error.message : 'Failed to restore session',
       });
@@ -241,19 +309,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       token: null,
       user: null,
-      workspaces: [],
-      currentWorkspaceId: null,
-      inviteInfo: null,
-      projects: [],
-      currentProjectId: null,
-      members: [],
-      dashboard: null,
-      backlog: [],
-      teamMessages: [],
-      personalMessages: [],
-      generatedTasks: null,
-      assignments: null,
       error: null,
+      loading: false,
+      ...fullSessionState(),
     });
   },
 
@@ -273,28 +331,42 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ workspaces, currentWorkspaceId });
 
     if (currentWorkspaceId) {
-      await get().loadCurrentInvite();
-      await get().loadProjects(currentWorkspaceId);
+      await Promise.allSettled([
+        get().loadCurrentInvite(),
+        get().loadWorkspaceIntegrations(currentWorkspaceId),
+        get().loadProjects(currentWorkspaceId),
+      ]);
     } else {
-      set({ inviteInfo: null, projects: [], currentProjectId: null });
+      set({
+        inviteInfo: null,
+        workspaceIntegrations: [],
+        projects: [],
+        currentProjectId: null,
+        ...projectScopedState(),
+      });
     }
   },
 
   createWorkspace: async (payload) => {
     const token = get().token;
     if (!token) throw new Error('Login required');
+
     set({ loading: true, error: null });
     try {
       const workspace = await api.createWorkspace(token, payload);
       const workspaces = [workspace, ...get().workspaces];
       localStorage.setItem(WORKSPACE_KEY, String(workspace.id));
+      localStorage.removeItem(PROJECT_KEY);
       set({
         workspaces,
         currentWorkspaceId: workspace.id,
         inviteInfo: null,
+        workspaceIntegrations: [],
         projects: [],
         currentProjectId: null,
+        ...projectScopedState(),
       });
+      await Promise.allSettled([get().loadCurrentInvite(), get().loadWorkspaceIntegrations(workspace.id)]);
       return workspace;
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Failed to create workspace' });
@@ -306,19 +378,21 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setCurrentWorkspace: async (workspaceId) => {
     localStorage.setItem(WORKSPACE_KEY, String(workspaceId));
+    localStorage.removeItem(PROJECT_KEY);
     set({
       currentWorkspaceId: workspaceId,
-      currentProjectId: null,
       inviteInfo: null,
-      members: [],
-      backlog: [],
-      dashboard: null,
-      generatedTasks: null,
-      assignments: null,
-      confirmedAssignments: null,
+      workspaceIntegrations: [],
+      projects: [],
+      currentProjectId: null,
+      ...projectScopedState(),
     });
-    await get().loadCurrentInvite();
-    await get().loadProjects(workspaceId);
+
+    await Promise.allSettled([
+      get().loadCurrentInvite(),
+      get().loadWorkspaceIntegrations(workspaceId),
+      get().loadProjects(workspaceId),
+    ]);
   },
 
   loadCurrentInvite: async () => {
@@ -390,6 +464,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   joinInvite: async (inviteCode) => {
     const token = get().token;
     if (!token) throw new Error('Login required');
+
     set({ loading: true, error: null });
     try {
       await api.joinInvite(token, inviteCode);
@@ -408,6 +483,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  loadWorkspaceIntegrations: async (workspaceId) => {
+    const token = get().token;
+    const targetWorkspaceId = workspaceId ?? get().currentWorkspaceId;
+    if (!token || !targetWorkspaceId) return;
+
+    const workspaceIntegrations = await api.listWorkspaceIntegrations(token, targetWorkspaceId);
+    set({ workspaceIntegrations });
+  },
+
   loadProjects: async (workspaceId) => {
     const token = get().token;
     const targetWorkspaceId = workspaceId ?? get().currentWorkspaceId;
@@ -423,17 +507,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     else localStorage.removeItem(PROJECT_KEY);
 
     set({ projects, currentProjectId });
+
     if (currentProjectId) {
       await get().loadProjectBundle(currentProjectId);
     } else {
-      set({
-        members: [],
-        backlog: [],
-        dashboard: null,
-        generatedTasks: null,
-        assignments: null,
-        confirmedAssignments: null,
-      });
+      set(projectScopedState());
     }
   },
 
@@ -460,7 +538,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setCurrentProject: async (projectId) => {
     localStorage.setItem(PROJECT_KEY, String(projectId));
-    set({ currentProjectId: projectId });
+    set({
+      currentProjectId: projectId,
+      ...projectScopedState(),
+    });
     await get().loadProjectBundle(projectId);
   },
 
@@ -469,13 +550,38 @@ export const useAppStore = create<AppState>((set, get) => ({
     const targetProjectId = projectId ?? get().currentProjectId;
     if (!token || !targetProjectId) return;
 
-    const [members, dashboard, backlog] = await Promise.all([
-      api.listMembers(token, targetProjectId),
-      api.getDashboard(token, targetProjectId),
-      api.listBacklog(token, targetProjectId),
-    ]);
+    set({ loading: true, error: null });
+    try {
+      const [hub, teamHistoryResult, personalHistoryResult] = await Promise.all([
+        api.getProjectHub(token, targetProjectId),
+        api.getTeamHistory(token, targetProjectId).catch(() => null),
+        api.getPersonalHistory(token, targetProjectId).catch(() => null),
+      ]);
 
-    set({ members, dashboard, backlog });
+      set({
+        projectSettings: hub.settings,
+        projectPermissions: hub.permissions,
+        members: hub.members,
+        dashboard: hub.internal_dashboard,
+        deliveryDashboard: hub.delivery_dashboard,
+        personalRecommendation: hub.personal_recommendation,
+        domains: hub.domains,
+        domainMappings: hub.domain_mappings,
+        memories: hub.memories,
+        backlog: hub.backlog,
+        workspaceIntegrations: hub.workspace_integrations,
+        projectIntegrations: hub.project_integrations,
+        teamMessages: teamHistoryResult ? teamHistoryResult.messages.map(normalizeHistoryMessage) : [],
+        personalMessages: personalHistoryResult
+          ? personalHistoryResult.messages.map(normalizeHistoryMessage)
+          : [],
+      });
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to load project hub' });
+      throw error;
+    } finally {
+      set({ loading: false });
+    }
   },
 
   saveProfile: async (payload) => {
@@ -504,8 +610,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const generatedTasks = await api.generateTasks(token, projectId);
-      set({ generatedTasks });
+      set({
+        generatedTasks,
+        assignments: null,
+        confirmedAssignments: null,
+      });
       await get().loadProjectBundle(projectId);
+      return generatedTasks;
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Failed to generate tasks' });
       throw error;
@@ -523,6 +634,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const assignments = await api.recommendAssignments(token, projectId, backlogItemIds);
       set({ assignments, confirmedAssignments: null });
+      return assignments;
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Failed to recommend assignments' });
       throw error;
@@ -554,6 +666,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const confirmedAssignments = await api.confirmAssignments(token, projectId, payload);
       set({ confirmedAssignments });
       await get().loadProjectBundle(projectId);
+      return confirmedAssignments;
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Failed to confirm assignments' });
       throw error;
@@ -564,11 +677,21 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   sendTeamMessage: async (content) => {
     const token = get().token;
+    const user = get().user;
     const projectId = get().currentProjectId;
-    if (!token || !projectId || !content.trim()) return;
+    if (!token || !user || !projectId || !content.trim()) return;
 
     set((state) => ({
-      teamMessages: [...state.teamMessages, { role: 'user', content }],
+      teamMessages: [
+        ...state.teamMessages,
+        {
+          role: 'user',
+          content,
+          senderId: user.id,
+          senderType: 'USER',
+          createdAt: new Date().toISOString(),
+        },
+      ],
     }));
 
     try {
@@ -582,55 +705,89 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   sendPersonalMessage: async (content) => {
     const token = get().token;
+    const user = get().user;
     const projectId = get().currentProjectId;
-    if (!token || !projectId || !content.trim()) return;
+    if (!token || !user || !projectId || !content.trim()) return;
 
     set((state) => ({
-      personalMessages: [...state.personalMessages, { role: 'user', content }],
+      personalMessages: [
+        ...state.personalMessages,
+        {
+          role: 'user',
+          content,
+          senderId: user.id,
+          senderType: 'USER',
+          createdAt: new Date().toISOString(),
+        },
+      ],
     }));
 
     try {
       const response = await api.sendPersonalMessage(token, projectId, content);
       appendAiMessage(set, 'personalMessages', response);
+      await get().refreshPersonalRecommendation();
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Failed to send personal message' });
       throw error;
     }
   },
 
-  fetchJiraSnapshot: async (payload) => {
+  refreshPersonalRecommendation: async () => {
+    const token = get().token;
+    const projectId = get().currentProjectId;
+    if (!token || !projectId) return;
+
+    const personalRecommendation = await api.getPersonalFocus(token, projectId);
+    set({ personalRecommendation });
+  },
+
+  getIntegrationConnectUrl: async (provider, redirectTo) => {
+    const token = get().token;
+    const workspaceId = get().currentWorkspaceId;
+    if (!token || !workspaceId) throw new Error('Workspace is required');
+
     set({ loading: true, error: null });
     try {
-      const jiraSnapshot = await api.getJiraSnapshot(payload);
-      set({ jiraSnapshot });
+      return await api.getIntegrationConnectUrl(token, workspaceId, provider, redirectTo);
     } catch (error) {
-      set({ error: error instanceof Error ? error.message : 'Failed to load Jira snapshot' });
+      set({ error: error instanceof Error ? error.message : 'Failed to create connect URL' });
       throw error;
     } finally {
       set({ loading: false });
     }
   },
 
-  fetchLinearSnapshot: async (payload) => {
+  attachProjectIntegration: async (payload) => {
+    const token = get().token;
+    const projectId = get().currentProjectId;
+    if (!token || !projectId) throw new Error('Project is required');
+
     set({ loading: true, error: null });
     try {
-      const linearSnapshot = await api.getLinearSnapshot(payload);
-      set({ linearSnapshot });
+      const integration = await api.attachProjectIntegration(token, projectId, payload);
+      await get().loadProjectBundle(projectId);
+      return integration;
     } catch (error) {
-      set({ error: error instanceof Error ? error.message : 'Failed to load Linear snapshot' });
+      set({ error: error instanceof Error ? error.message : 'Failed to attach integration' });
       throw error;
     } finally {
       set({ loading: false });
     }
   },
 
-  fetchWorkTrackingDashboard: async (payload) => {
+  removeProjectIntegration: async (bindingId) => {
+    const token = get().token;
+    const projectId = get().currentProjectId;
+    if (!token) throw new Error('Login required');
+
     set({ loading: true, error: null });
     try {
-      const workTrackingDashboard = await api.getWorkTrackingDashboard(payload);
-      set({ workTrackingDashboard });
+      await api.removeProjectIntegration(token, bindingId);
+      if (projectId) {
+        await get().loadProjectBundle(projectId);
+      }
     } catch (error) {
-      set({ error: error instanceof Error ? error.message : 'Failed to load work tracking dashboard' });
+      set({ error: error instanceof Error ? error.message : 'Failed to remove integration' });
       throw error;
     } finally {
       set({ loading: false });
@@ -639,6 +796,28 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   clearError: () => set({ error: null }),
 }));
+
+function normalizeHistoryMessage(message: ChatHistoryMessage): MessageItem {
+  return {
+    id: message.id,
+    role: message.sender_type === 'AI' ? 'ai' : 'user',
+    content: message.content,
+    payload: parsePayload(message.metadata),
+    senderId: message.sender_id ?? null,
+    senderType: message.sender_type,
+    createdAt: message.created_at,
+  };
+}
+
+function parsePayload(raw?: string | null): Record<string, unknown> | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 function appendAiMessage(
   set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void,
@@ -652,14 +831,19 @@ function appendAiMessage(
         role: 'ai',
         content: stringifyAnswer(response.answer),
         payload: response.answer,
+        senderType: 'AI',
+        createdAt: new Date().toISOString(),
       },
     ],
   }));
 }
 
 function stringifyAnswer(answer: Record<string, unknown>): string {
-  if (typeof answer.summary === 'string') {
+  if (typeof answer.summary === 'string' && answer.summary.trim()) {
     return answer.summary;
+  }
+  if (typeof answer.next_action === 'string' && answer.next_action.trim()) {
+    return answer.next_action;
   }
   return JSON.stringify(answer, null, 2);
 }

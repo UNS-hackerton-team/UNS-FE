@@ -43,84 +43,6 @@ export type InviteInfo = {
   message?: string;
 };
 
-export type ProgressSummary = {
-  total_items: number;
-  effective_items: number;
-  backlog_items: number;
-  in_progress_items: number;
-  done_items: number;
-  canceled_items: number;
-  total_estimate?: number | null;
-  completed_estimate?: number | null;
-  completion_rate: number;
-  weighted_completion_rate?: number | null;
-};
-
-export type WorkIteration = {
-  source: 'jira' | 'linear';
-  external_id: string;
-  name: string;
-  state?: string | null;
-  scope_id: string;
-  scope_name: string;
-  start_date?: string | null;
-  end_date?: string | null;
-  goal?: string | null;
-  progress?: number | null;
-};
-
-export type WorkItem = {
-  source: 'jira' | 'linear';
-  scope_id: string;
-  scope_name: string;
-  external_id: string;
-  title: string;
-  url?: string | null;
-  project_name?: string | null;
-  team_name?: string | null;
-  assignee_name?: string | null;
-  status_name: string;
-  status_category: 'backlog' | 'in_progress' | 'done' | 'canceled';
-  labels: string[];
-  estimate?: number | null;
-  priority?: string | null;
-  is_backlog: boolean;
-  is_current_iteration: boolean;
-  iteration_id?: string | null;
-  iteration_name?: string | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-  completed_at?: string | null;
-};
-
-export type WorkScopeSnapshot = {
-  source: 'jira' | 'linear';
-  scope_id: string;
-  scope_name: string;
-  iterations: WorkIteration[];
-  summary: ProgressSummary;
-  items: WorkItem[];
-};
-
-export type WorkSnapshotResponse = {
-  scopes: WorkScopeSnapshot[];
-  summary: ProgressSummary;
-};
-
-export type WorkTrackingArea = {
-  key: string;
-  label: string;
-  summary: ProgressSummary;
-};
-
-export type WorkTrackingDashboardResponse = {
-  summary: ProgressSummary;
-  areas: WorkTrackingArea[];
-  sources: WorkTrackingArea[];
-  scopes: WorkScopeSnapshot[];
-  items: WorkItem[];
-};
-
 export type Project = {
   id: number;
   workspace_id: number;
@@ -187,11 +109,220 @@ export type BacklogItem = {
   created_at: string;
 };
 
+export type ProgressSummary = {
+  total_items: number;
+  effective_items: number;
+  backlog_items: number;
+  in_progress_items: number;
+  done_items: number;
+  canceled_items: number;
+  total_estimate?: number | null;
+  completed_estimate?: number | null;
+  completion_rate: number;
+  weighted_completion_rate?: number | null;
+};
+
+export type WorkIteration = {
+  source: 'jira' | 'linear';
+  external_id: string;
+  name: string;
+  state?: string | null;
+  scope_id: string;
+  scope_name: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  goal?: string | null;
+  progress?: number | null;
+};
+
+export type WorkItem = {
+  source: 'jira' | 'linear';
+  scope_id: string;
+  scope_name: string;
+  external_id: string;
+  title: string;
+  url?: string | null;
+  project_name?: string | null;
+  team_name?: string | null;
+  assignee_name?: string | null;
+  status_name: string;
+  status_category: 'backlog' | 'in_progress' | 'done' | 'canceled';
+  labels: string[];
+  estimate?: number | null;
+  priority?: string | null;
+  is_backlog: boolean;
+  is_current_iteration: boolean;
+  iteration_id?: string | null;
+  iteration_name?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  completed_at?: string | null;
+};
+
+export type DashboardArea = {
+  key: string;
+  label: string;
+  summary: ProgressSummary;
+};
+
+export type WorkspaceIntegration = {
+  id: number;
+  workspace_id: number;
+  provider: string;
+  external_workspace_id: string;
+  external_workspace_name: string;
+  external_workspace_url?: string | null;
+  scope?: string | null;
+  status: string;
+  connected_by?: number | null;
+  token_expires_at?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type IntegrationConnectUrlResponse = {
+  provider: string;
+  configured: boolean;
+  authorization_url?: string | null;
+  message?: string | null;
+};
+
+export type IntegrationCatalogItem = {
+  id: string;
+  name: string;
+  key?: string | null;
+  url?: string | null;
+};
+
+export type IntegrationCatalogResponse = {
+  provider: string;
+  items: IntegrationCatalogItem[];
+};
+
+export type ProjectIntegration = {
+  id: number;
+  project_id: number;
+  workspace_integration_id: number;
+  provider: string;
+  scope_type: string;
+  scope_id: string;
+  scope_name: string;
+  settings: Record<string, unknown>;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type ProjectSettings = {
+  id: number;
+  project_id: number;
+  ai_prompt: string;
+  tech_stack_notes: string;
+  summary_cache: string;
+  created_by?: number | null;
+  updated_by?: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ProjectPermission = {
+  current_user_id: number;
+  pm_user_id: number;
+  is_pm: boolean;
+};
+
+export type ProjectDomain = {
+  id: number;
+  project_id: number;
+  code: string;
+  name: string;
+  color: string;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type ProjectDomainMapping = {
+  id: number;
+  project_id: number;
+  domain_id: number;
+  source: string;
+  match_field: string;
+  match_value: string;
+  created_at: string;
+};
+
+export type ProjectMemoryEntry = {
+  id: number;
+  project_id: number;
+  memory_type: string;
+  title: string;
+  content: string;
+  status: string;
+  created_by?: number | null;
+  created_at: string;
+};
+
+export type DomainProgress = {
+  domain_id: number;
+  code: string;
+  name: string;
+  color: string;
+  summary: ProgressSummary;
+  sources: string[];
+};
+
+export type ProjectDeliveryDashboard = {
+  summary: ProgressSummary;
+  sources: DashboardArea[];
+  domains: DomainProgress[];
+  active_items: WorkItem[];
+  unmapped_items: number;
+  integration_warnings: string[];
+};
+
+export type PersonalRecommendation = {
+  summary: string;
+  current_assignments: Array<Record<string, unknown>>;
+  recommended_backlog: Array<Record<string, unknown>>;
+  context_notes: string[];
+  excluded_titles: string[];
+};
+
+export type ProjectHubResponse = {
+  project: Project;
+  settings: ProjectSettings;
+  permissions: ProjectPermission;
+  members: TeamMember[];
+  backlog: BacklogItem[];
+  internal_dashboard: DashboardData;
+  delivery_dashboard: ProjectDeliveryDashboard;
+  domains: ProjectDomain[];
+  domain_mappings: ProjectDomainMapping[];
+  workspace_integrations: WorkspaceIntegration[];
+  project_integrations: ProjectIntegration[];
+  memories: ProjectMemoryEntry[];
+  personal_recommendation: PersonalRecommendation;
+};
+
 export type ChatResponse = {
   user_message_id: number;
   ai_message_id: number;
   room_type: string;
   answer: Record<string, unknown>;
+};
+
+export type ChatHistoryMessage = {
+  id: number;
+  chat_room_id: number;
+  sender_id?: number | null;
+  sender_type: string;
+  content: string;
+  metadata?: string | null;
+  created_at: string;
+};
+
+export type ChatHistoryResponse = {
+  room_type: string;
+  messages: ChatHistoryMessage[];
 };
 
 export type TaskGenerationResponse = {
@@ -250,8 +381,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   if (!response.ok) {
     let message = 'Request failed';
     try {
-      const errorData = (await response.json()) as { detail?: string };
-      message = errorData.detail ?? message;
+      const data = (await response.json()) as { detail?: string };
+      if (typeof data.detail === 'string' && data.detail.trim()) {
+        message = data.detail;
+      }
     } catch {
       message = response.statusText || message;
     }
@@ -271,13 +404,17 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+
   login: (payload: { name: string; password: string }) =>
     request<AuthResponse>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+
   me: (token: string) => request<User>('/auth/me', { token }),
+
   listWorkspaces: (token: string) => request<Workspace[]>('/workspaces', { token }),
+
   createWorkspace: (
     token: string,
     payload: { name: string; description: string; team_type: string }
@@ -287,8 +424,10 @@ export const api = {
       token,
       body: JSON.stringify(payload),
     }),
+
   getInvite: (token: string, workspaceId: number) =>
     request<InviteInfo>(`/workspaces/${workspaceId}/invite`, { token }),
+
   regenerateInvite: (
     token: string,
     workspaceId: number,
@@ -299,19 +438,24 @@ export const api = {
       token,
       body: JSON.stringify(payload),
     }),
+
   deactivateInvite: (token: string, workspaceId: number) =>
     request<InviteInfo>(`/workspaces/${workspaceId}/invite/deactivate`, {
       method: 'PATCH',
       token,
     }),
+
   validateInvite: (inviteCode: string) => request<InviteInfo>(`/invites/${inviteCode}`),
+
   joinInvite: (token: string, inviteCode: string) =>
     request<{ workspace_id: number; workspace_name: string; joined: boolean; workspace_role: string }>(
       `/invites/${inviteCode}/join`,
       { method: 'POST', token }
     ),
+
   listProjects: (token: string, workspaceId: number) =>
     request<Project[]>(`/workspaces/${workspaceId}/projects`, { token }),
+
   createProject: (
     token: string,
     workspaceId: number,
@@ -322,6 +466,9 @@ export const api = {
       tech_stack: string[];
       priority: string;
       mvp_scope: string;
+      start_date?: string | null;
+      end_date?: string | null;
+      ai_prompt?: string;
     }
   ) =>
     request<Project>(`/workspaces/${workspaceId}/projects`, {
@@ -329,8 +476,7 @@ export const api = {
       token,
       body: JSON.stringify(payload),
     }),
-  listMembers: (token: string, projectId: number) =>
-    request<TeamMember[]>(`/projects/${projectId}/members`, { token }),
+
   saveProfile: (
     token: string,
     projectId: number,
@@ -348,22 +494,73 @@ export const api = {
       token,
       body: JSON.stringify(payload),
     }),
-  getDashboard: (token: string, projectId: number) =>
-    request<DashboardData>(`/projects/${projectId}/dashboard`, { token }),
-  listBacklog: (token: string, projectId: number) =>
-    request<BacklogItem[]>(`/projects/${projectId}/backlog`, { token }),
+
+  getProjectHub: (token: string, projectId: number) =>
+    request<ProjectHubResponse>(`/projects/${projectId}/hub`, { token }),
+
+  getPersonalFocus: (token: string, projectId: number) =>
+    request<PersonalRecommendation>(`/projects/${projectId}/ai/focus`, { token }),
+
+  listWorkspaceIntegrations: (token: string, workspaceId: number) =>
+    request<WorkspaceIntegration[]>(`/workspaces/${workspaceId}/integrations`, { token }),
+
+  getIntegrationConnectUrl: (
+    token: string,
+    workspaceId: number,
+    provider: string,
+    redirectTo?: string
+  ) => {
+    const params = new URLSearchParams();
+    if (redirectTo) params.set('redirect_to', redirectTo);
+    const query = params.toString();
+    return request<IntegrationConnectUrlResponse>(
+      `/workspaces/${workspaceId}/integrations/${provider}/connect${query ? `?${query}` : ''}`,
+      { token }
+    );
+  },
+
+  getIntegrationCatalog: (token: string, integrationId: number) =>
+    request<IntegrationCatalogResponse>(`/workspace-integrations/${integrationId}/catalog`, {
+      token,
+    }),
+
+  attachProjectIntegration: (
+    token: string,
+    projectId: number,
+    payload: {
+      workspace_integration_id: number;
+      scope_type: string;
+      scope_id: string;
+      scope_name: string;
+      settings?: Record<string, unknown>;
+    }
+  ) =>
+    request<ProjectIntegration>(`/projects/${projectId}/integrations`, {
+      method: 'POST',
+      token,
+      body: JSON.stringify(payload),
+    }),
+
+  removeProjectIntegration: (token: string, bindingId: number) =>
+    request<void>(`/project-integrations/${bindingId}`, {
+      method: 'DELETE',
+      token,
+    }),
+
   generateTasks: (token: string, projectId: number) =>
     request<TaskGenerationResponse>(`/projects/${projectId}/ai/tasks`, {
       method: 'POST',
       token,
       body: JSON.stringify({ create_backlog: true }),
     }),
+
   recommendAssignments: (token: string, projectId: number, backlogItemIds: number[]) =>
     request<AssignmentResponse>(`/projects/${projectId}/ai/assignments`, {
       method: 'POST',
       token,
       body: JSON.stringify({ backlog_item_ids: backlogItemIds }),
     }),
+
   confirmAssignments: (
     token: string,
     projectId: number,
@@ -379,79 +576,24 @@ export const api = {
       token,
       body: JSON.stringify({ assignments }),
     }),
+
+  getTeamHistory: (token: string, projectId: number) =>
+    request<ChatHistoryResponse>(`/projects/${projectId}/chat/team/history`, { token }),
+
+  getPersonalHistory: (token: string, projectId: number) =>
+    request<ChatHistoryResponse>(`/projects/${projectId}/chat/personal/history`, { token }),
+
   sendTeamMessage: (token: string, projectId: number, content: string) =>
     request<ChatResponse>(`/projects/${projectId}/chat/team/messages`, {
       method: 'POST',
       token,
       body: JSON.stringify({ content }),
     }),
+
   sendPersonalMessage: (token: string, projectId: number, content: string) =>
     request<ChatResponse>(`/projects/${projectId}/chat/personal/messages`, {
       method: 'POST',
       token,
       body: JSON.stringify({ content }),
-    }),
-  getJiraSnapshot: (
-    payload: {
-      boards: Array<{
-        board_id: number;
-        sprint_state?: 'active' | 'future' | 'closed';
-        sprint_limit?: number;
-        sprint_issue_limit?: number;
-        backlog_limit?: number;
-        include_sprints?: boolean;
-        include_backlog?: boolean;
-      }>;
-    }
-  ) =>
-    request<WorkSnapshotResponse>('/work-tracking/jira/snapshot', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-  getLinearSnapshot: (
-    payload: {
-      teams: Array<{
-        team_id?: string;
-        team_key?: string;
-        issue_limit?: number;
-        cycle_limit?: number;
-        include_current_cycle?: boolean;
-        include_backlog?: boolean;
-      }>;
-    }
-  ) =>
-    request<WorkSnapshotResponse>('/work-tracking/linear/snapshot', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-  getWorkTrackingDashboard: (payload: {
-    jira?: {
-      boards: Array<{
-        board_id: number;
-        sprint_state?: 'active' | 'future' | 'closed';
-        sprint_limit?: number;
-        sprint_issue_limit?: number;
-        backlog_limit?: number;
-        include_sprints?: boolean;
-        include_backlog?: boolean;
-      }>;
-    };
-    linear?: {
-      teams: Array<{
-        team_id?: string;
-        team_key?: string;
-        issue_limit?: number;
-        cycle_limit?: number;
-        include_current_cycle?: boolean;
-        include_backlog?: boolean;
-      }>;
-    };
-    group_by?: 'source' | 'scope' | 'project' | 'team' | 'assignee' | 'label' | 'status_category';
-    include_items?: boolean;
-    exclude_canceled_from_progress?: boolean;
-  }) =>
-    request<WorkTrackingDashboardResponse>('/work-tracking/dashboard', {
-      method: 'POST',
-      body: JSON.stringify(payload),
     }),
 };

@@ -1,5 +1,13 @@
 import { motion } from 'framer-motion';
-import { ArrowRight, BrainCircuit, Target, MessageSquare, LayoutDashboard, Languages } from 'lucide-react';
+import {
+  ArrowRight,
+  BrainCircuit,
+  Target,
+  MessageSquare,
+  LayoutDashboard,
+  Languages,
+  type LucideIcon,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
@@ -90,7 +98,7 @@ const Hero = () => {
   );
 };
 
-const FeatureCard = ({ icon: Icon, title, description }: { icon: any, title: string, description: string }) => (
+const FeatureCard = ({ icon: Icon, title, description }: { icon: LucideIcon; title: string; description: string }) => (
   <motion.div 
     whileHover={{ y: -5 }}
     style={{ 
@@ -148,7 +156,6 @@ const Features = () => {
 
 const Landing = () => {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'white' }}>
       <Navbar />

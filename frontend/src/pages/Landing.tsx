@@ -35,7 +35,7 @@ const Navbar = () => {
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <div style={{ width: '32px', height: '32px', backgroundColor: 'var(--notion-black)', borderRadius: '6px' }} />
-        <span className="body-semibold" style={{ fontSize: '18px' }}>UNS</span>
+        <span className="body-semibold" style={{ fontSize: '18px' }}>UNP</span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
         <a href="#" className="nav-link" style={{ textDecoration: 'none', color: 'var(--notion-black)' }}>{t('nav.product')}</a>
@@ -167,7 +167,7 @@ const Landing = () => {
         <div className="container" style={{ textAlign: 'center' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
             <div style={{ width: '24px', height: '24px', backgroundColor: 'var(--notion-black)', borderRadius: '4px' }} />
-            <span className="body-semibold">UNS</span>
+            <span className="body-semibold">UNP</span>
           </div>
           <p className="body-text" style={{ color: 'var(--warm-gray-300)', fontSize: '14px' }}>{t('footer.rights')}</p>
         </div>

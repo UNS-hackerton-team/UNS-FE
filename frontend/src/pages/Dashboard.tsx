@@ -452,11 +452,11 @@ const Dashboard = () => {
               letterSpacing: '0.06em',
             }}
           >
-            UNS
+            UNP
           </div>
           <div>
             <div className="body-semibold" style={{ fontSize: '18px' }}>
-              Project Hub
+              UNP Hub
             </div>
             <div className="body-text" style={{ fontSize: '13px', color: 'var(--warm-gray-500)' }}>
               연결, 실행, AI 협업을 한 화면에서
@@ -478,13 +478,6 @@ const Dashboard = () => {
             label="프로젝트"
             caption="프로젝트 개요와 AI 실행 계획"
             onClick={() => setActiveTab('project')}
-          />
-          <SidebarItem
-            active={activeTab === 'delivery'}
-            icon={Workflow}
-            label="딜리버리 연결"
-            caption="보드와 팀을 프로젝트에 붙이기"
-            onClick={() => setActiveTab('delivery')}
           />
           <SidebarItem
             active={activeTab === 'members'}

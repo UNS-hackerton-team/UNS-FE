@@ -14,7 +14,7 @@ const resources = {
       hero: {
         badge: '지능형 업무 할당 엔진 탑재',
         title: '전공에 맞춘 태스크 분배, 팀의 AI PM이 시작합니다.',
-        subtitle: 'UNS는 사용자의 데이터를 분석하여 최적의 업무를 제안합니다. AI PM과 함께 스크럼을 가속화하세요.',
+        subtitle: 'UNP는 사용자의 데이터를 분석하여 최적의 업무를 제안합니다. AI PM과 함께 스크럼을 가속화하세요.',
         ctaPrimary: '무료로 시작하기',
         ctaSecondary: '서비스 소개 보기'
       },
@@ -62,7 +62,7 @@ const resources = {
       hero: {
         badge: 'Intelligent Task Allocation Engine',
         title: 'Major-Specific Tasking, Powered by your AI PM.',
-        subtitle: 'UNS analyzes your data to suggest the best tasks. Accelerate your scrum with an AI Project Manager.',
+        subtitle: 'UNP analyzes your data to suggest the best tasks. Accelerate your scrum with an AI Project Manager.',
         ctaPrimary: 'Start for Free',
         ctaSecondary: 'Learn More'
       },
